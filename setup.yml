@@ -1,0 +1,54 @@
+---
+- name: Update Ubuntu server in linux group
+  hosts: linux
+  become: yes
+  vars_files:
+    - vault.yml
+  gather_facts: yes
+  vars:
+    target_host_name: linux
+  tags: [update]
+  tasks:
+    - name: Run only on the ubuntu host or when distribution is Ubuntu
+      debug:
+        msg: "Proceeding with update on {{ inventory_hostname }} ({{ ansible_facts['distribution'] }})"
+      when: inventory_hostname == target_host_name or ansible_facts['distribution'] == 'Ubuntu'
+
+    - name: Update packages with apt
+      when: ansible_pkg_mgr == 'apt'
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: Upgrade packages with apt
+      when: ansible_pkg_mgr == 'apt'
+      ansible.builtin.apt:
+        upgrade: dist
+
+    - name: Autoremove unused packages and autoclean
+      ansible.builtin.apt:
+        autoremove: yes
+        autoclean: yes
+
+    - name: Ensure nano is installed
+      apt:
+        name: nano
+        state: present
+
+    - name: Ensure EDITOR=nano is set in .bashrc
+      lineinfile:
+        path: "~/.bashrc"
+        regexp: "^export EDITOR="
+        line: "export EDITOR=nano"
+        create: yes
+        insertafter: EOF
+      become: false
+
+    - name: Check if reboot is required
+      stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+
+    - name: Reboot if required
+      reboot:
+        reboot_timeout: 600
+      when: reboot_required.stat.exists
